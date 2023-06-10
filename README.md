@@ -59,3 +59,20 @@ Inventory count 18
 +--------------------------------------------------------------------+------------------------------------+------------+
 ```
 
+
+
+
+
+# Install package
+
+
+
+
+
+```shell
+python setup.py sdist bdist_wheel
+pip install dist/bitcoin_p2p-0.1-py3-none-any.whl  --force-reinstall
+```
+
+
+
