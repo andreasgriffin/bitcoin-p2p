@@ -4,7 +4,7 @@
 ```python
 import socket
 import bdkpython as bdk
-from bitcoin_p2p import main, p2p
+from bitcoin_p2p import tools, p2p
 # see https://github.com/andreasgriffin/bitcoin-p2p
 
 global_dict = {}
@@ -14,9 +14,9 @@ def callback_min_feerate(feerate):
     
 
 def call_back_tx(tx_bytes):
-    transaction = main.transaction_from_bytes(tx_bytes)
+    transaction = tools.transaction_from_bytes(tx_bytes)
 
-    # transaction = main.filter_txs(transaction)
+    # transaction = tools.filter_txs(transaction)
     #if not transaction:
     #    return
     

@@ -1,9 +1,8 @@
-
+from typing import List, Tuple
 from prettytable import PrettyTable
 import bdkpython as bdk
 from . import p2p
 
-from typing import List, Tuple
 
 
 def output_addresses_values(transaction, network):
@@ -76,6 +75,3 @@ def filter_txs(transaction, filter_inputs:List[Tuple[str, int]]=None, filter_out
     return None if any([filter_txids, filter_inputs, filter_output_addresses]) else transaction
 
 
-
-if __name__ == '__main__':
-    p2p.listen(p2p.get_bitcoin_peer(), call_back_tx=pretty_tx_from_bytes)
