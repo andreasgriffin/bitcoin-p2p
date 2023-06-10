@@ -96,7 +96,7 @@ def decode_version_payload(payload):
         3: {'name': 'NODE_WITNESS', 'description': 'See BIP 0144: https://github.com/bitcoin/bips/blob/master/bip-0144.mediawiki'},
         4: {'name': 'NODE_XTHIN', 'description': 'Never formally proposed (as a BIP), and discontinued. Was historically sporadically seen on the network.'},
         6: {'name': 'NODE_COMPACT_FILTERS', 'description': 'See BIP 0157: https://github.com/bitcoin/bips/blob/master/bip-0157.mediawiki'},
-        10: {'name': 'NODE_NETWORK_LIMITED', 'description': 'See BIP 0159: https://github.com/bitcoin/bips/blob/master/bip-0159.mediawiki'}
+        10: {'name': 'NODE_NETWORK_LIMITED', 'description': 'the node is capable of providing at least the last 288 blocks.  See BIP 0159: https://github.com/bitcoin/bips/blob/master/bip-0159.mediawiki'}
     }
 
     version, services, timestamp = struct.unpack_from("<IQQ", payload, 0)
