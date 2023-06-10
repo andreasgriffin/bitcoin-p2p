@@ -52,8 +52,7 @@ def pretty_tx_from_bytes(tx_bytes):
 
 
 
-def filter_txs(tx_bytes, filter_inputs:List[Tuple[str, int]]=None, filter_output_addresses:List[str]=None, filter_txids:List[str]=None) -> Tuple[List[Tuple[str, int]], List[str]]:
-    transaction = transaction_from_bytes(tx_bytes)
+def filter_txs(transaction, filter_inputs:List[Tuple[str, int]]=None, filter_output_addresses:List[str]=None, filter_txids:List[str]=None) -> Tuple[List[Tuple[str, int]], List[str]]:
 
     input_set = set([(inp.previous_output.txid, inp.previous_output.vout) for inp in  transaction.input()])
     
