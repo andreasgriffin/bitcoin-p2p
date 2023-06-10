@@ -3,6 +3,7 @@ from prettytable import PrettyTable
 import bdkpython as bdk
 from . import p2p
 
+from typing import List, Tuple
 
 
 def output_addresses_values(transaction, network):
@@ -47,6 +48,34 @@ def transaction_table(transaction):
 
 def pretty_tx_from_bytes(tx_bytes):
     return print(transaction_table(transaction_from_bytes(tx_bytes)))
+
+
+
+
+def filter_txs(tx_bytes, filter_inputs:List[Tuple[str, int]]=None, filter_output_addresses:List[str]=None, filter_txids:List[str]=None) -> Tuple[List[Tuple[str, int]], List[str]]:
+    transaction = transaction_from_bytes(tx_bytes)
+
+    input_set = set([(inp.previous_output.txid, inp.previous_output.vout) for inp in  transaction.input()])
+    
+    
+    output_addresses, output_values = zip(*output_addresses_values(transaction, bdk.Network.BITCOIN))
+    output_addresses = set(output_addresses)
+    
+    if filter_txids is not None:
+        if transaction.txid() in filter_txids:
+            return transaction
+    if filter_inputs is not None:
+        input_set = input_set.intersection(filter_inputs)
+        if input_set:
+            return transaction
+    if filter_output_addresses is not None:
+        output_addresses = output_addresses.intersection(filter_output_addresses)
+        if output_addresses:
+            return transaction
+    
+    
+    return None if any([filter_txids, filter_inputs, filter_output_addresses]) else transaction
+
 
 
 if __name__ == '__main__':
