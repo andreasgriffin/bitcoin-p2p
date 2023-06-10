@@ -1,7 +1,7 @@
 
 from prettytable import PrettyTable
 import bdkpython as bdk
-import p2p 
+from . import p2p
 
 
 
