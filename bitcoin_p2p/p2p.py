@@ -1,10 +1,11 @@
 import socket
 import struct
-import time
+import time, os
 import hashlib
+import bdkpython as bdk
 # https://en.bitcoin.it/wiki/Protocol_documentation#version
 
-debug =False
+debug = False
 
 
 def decode_varint(data):
@@ -31,32 +32,41 @@ def receive_exactly(sock, size):
     while len(data) < size:
         more_data = sock.recv(size - len(data))
         if not more_data:
-            raise Exception("Connection closed")
+            raise Exception(f"Connection closed. data = {data}")
         data += more_data
     return data
 
-def get_bitcoin_message(message_type, payload):
-    header = struct.pack(">L", 0xF9BEB4D9)
+def get_bitcoin_message(message_type, payload, network=bdk.Network.BITCOIN):
+    if network==bdk.Network.BITCOIN:
+        magic_value = 0xF9BEB4D9
+    elif network in [bdk.Network.TESTNET, bdk.Network.REGTEST]:
+        magic_value = 0xDAB5BFFA
+    elif network in [bdk.Network.SIGNET]:
+        magic_value = 0x40CF030A
+        
+        
+    header = struct.pack(">L", magic_value)        
     header += struct.pack("12s", bytes(message_type, 'utf-8'))
     header += struct.pack("<L", len(payload))
     header += double_sha256(payload)[:4]
     return header + payload
 
-def get_version_payload():
+def get_version_payload(remote_ip, remote_port):
     my_ip = '127.0.0.1'  # is is ok for  a non-reachable node
+    my_port = 8333
 
     version = 70014
     services = 1
     timestamp = int(time.time())
     addr_recvservices = 1
-    addr_recvipaddress = socket.inet_pton(socket.AF_INET6, f"::ffff:{my_ip}")
-    addr_recvport = 8333
+    addr_recvipaddress = socket.inet_pton(socket.AF_INET6, f"::ffff:{remote_ip}")
+    addr_recv_port = remote_port
     addr_transservices = 1
     addr_transipaddress = socket.inet_pton(socket.AF_INET6, f"::ffff:{my_ip}")
-    addr_transport = 8333
-    nonce = 0
+    addr_trans_port = my_port
+    nonce = int.from_bytes(os.urandom(8), 'little')
     user_agentbytes = 0
-    start_height = 329167
+    start_height = 0
     relay = 1  # enable receiving txs
 
     payload = struct.pack("<I", version)
@@ -64,10 +74,10 @@ def get_version_payload():
     payload += struct.pack("<Q", timestamp)
     payload += struct.pack("<Q", addr_recvservices)
     payload += struct.pack("16s", addr_recvipaddress)
-    payload += struct.pack(">H", addr_recvport)
+    payload += struct.pack(">H", addr_recv_port)
     payload += struct.pack("<Q", addr_transservices)
     payload += struct.pack("16s", addr_transipaddress)
-    payload += struct.pack(">H", addr_transport)
+    payload += struct.pack(">H", addr_trans_port)
     payload += struct.pack("<Q", nonce)
     payload += struct.pack("<B", user_agentbytes)
     payload += struct.pack("<I", start_height)
@@ -152,7 +162,8 @@ def process_command(s,
                     callback_header=None, 
                     callback_addr=None, 
                     callback_inv=None,
-                    callback_version=None):
+                    callback_version=None,
+                    network=bdk.Network.BITCOIN):
 
     if debug:
         print('\nwaiting for message')
@@ -168,7 +179,7 @@ def process_command(s,
 
         
     if command == "verack":
-        s.send(get_bitcoin_message("verack", b''))
+        s.send(get_bitcoin_message("verack", b'', network=network))
         
 
     elif command == 'sendheaders':
@@ -184,7 +195,7 @@ def process_command(s,
             callback_version(version_data)
         
         # Respond with verack message
-        s.send(get_bitcoin_message("verack", b''))            
+        s.send(get_bitcoin_message("verack", b'', network=network))            
     elif command == 'inv':
         count, consumed = decode_varint(payload)  # read varint
         print(f'Inventory count {count}')
@@ -212,7 +223,7 @@ def process_command(s,
             getdata_payload = encode_varint(len(inv_type_hashes))
             for inv_type, tx_hash in inv_type_hashes:
                 getdata_payload += struct.pack("<I32s", inv_type, tx_hash)
-            s.send(get_bitcoin_message("getdata", getdata_payload))
+            s.send(get_bitcoin_message("getdata", getdata_payload, network=network))
         
         
     elif command == 'addr':
@@ -236,7 +247,7 @@ def process_command(s,
         # Handle ping message: Respond with a pong message
         print("Received ping")
         nonce = payload[:8]  # nonce is 8 bytes
-        s.send(get_bitcoin_message("pong", nonce))
+        s.send(get_bitcoin_message("pong", nonce, network=network))
 
     elif command == 'getheaders':
         # Handle getheaders message
@@ -281,9 +292,9 @@ def process_command(s,
 
 
 
-def create_socket_connection(peer, timeout=60):
+def create_socket_connection(peer, timeout=60, network=bdk.Network.BITCOIN):
     print(f'Connecting to {peer}')
-
+    port = peer[3]
     # Connect to the node
     if isinstance(peer, (list, tuple)):
         s = socket.socket(peer[1], peer[2])
@@ -293,10 +304,10 @@ def create_socket_connection(peer, timeout=60):
         peer_ip = peer
     
     s.settimeout(timeout)  # timeout after 60 seconds of inactivity
-    s.connect((peer_ip, 8333))  # replace with your node's IP and port
+    s.connect((peer_ip, port))  # replace with your node's IP and port
     print(f'Success. Connected to {peer}')
 
-    s.send(get_bitcoin_message("version", get_version_payload()))
+    s.send(get_bitcoin_message("version", get_version_payload(peer_ip, port), network=network))
     return s    
     
 
@@ -311,14 +322,16 @@ def listen(peer,
            callback_inv=None,
            callback_version=None,
            f_continue_listening=lambda:True,
-           timeout=60):
+           timeout=60,
+           network=bdk.Network.BITCOIN,
+           ):
     """
     Description:
     The listen function establishes a socket connection with a specified peer and listens for incoming messages. It continuously processes the received commands until a specified condition is met. It provides options to fetch transactions and supports various callback functions for different message types.
 
     Inputs:
 
-        peer: (Type: string) - The address of the peer to connect to.
+        peer: (Type: string) - The address of the peer; a tuple containing the IP address (string), socket kind (int), and socket type (int), port (int).
         fetch_txs: (Type: boolean, Default: True) - Indicates whether to fetch transactions.
         call_back_tx: (Type: function, Default: None) - Callback function for transaction data.
         callback_min_feerate: (Type: function, Default: None) - Callback function for minimum feerate data.
@@ -336,13 +349,13 @@ def listen(peer,
 
 
     try:
-        s = create_socket_connection(peer, timeout=timeout)
+        s = create_socket_connection(peer, timeout=timeout, network=network)
         print('socket connection created')
         # Listen for incoming messages
         while f_continue_listening():
             process_command(s, fetch_txs=fetch_txs, call_back_tx=call_back_tx,
                             callback_min_feerate=callback_min_feerate, callback_header=callback_header,
-                            callback_addr=callback_addr, callback_inv=callback_inv, callback_version=callback_version)
+                            callback_addr=callback_addr, callback_inv=callback_inv, callback_version=callback_version, network=network)
     except TimeoutError:
         print('timeout')
     except OSError:
@@ -357,7 +370,7 @@ def listen(peer,
 
 
 
-def get_bitcoin_peers():
+def get_bitcoin_peers(network=bdk.Network.BITCOIN):
     """
     Description:
     The get_bitcoin_peers function retrieves a list of Bitcoin peers by making a DNS request to a seed Bitcoin DNS server. It filters the obtained nodes based on socket kind and returns a list of peer addresses.
@@ -369,8 +382,8 @@ def get_bitcoin_peers():
     Output:
 
         Type: list
-        Format: [(string, int, int), ...]
-        Description: A list of peer addresses, where each address is represented as a tuple containing the IP address (string), socket kind (int), and socket type (int).
+        Format: [(string, int, int, int), ...]
+        Description: A list of peer addresses, where each address is represented as a tuple containing the IP address (string), socket kind (int), and socket type (int), port (int).
     """
     # dns_seeds = [
     #     'bitcoin.jonasschnelli.ch',
@@ -381,10 +394,15 @@ def get_bitcoin_peers():
     # ]
     
     # use a dns request to a seed bitcoin DNS server to find a node
-    nodes = socket.getaddrinfo("seed.bitcoin.sipa.be", None)
+    if network == bdk.Network.BITCOIN:
+        nodes = socket.getaddrinfo("seed.bitcoin.sipa.be", None)
+        port = 8333
+    else:
+        nodes = socket.getaddrinfo("testnet-seed.bluematt.me", None) 
+        port = 18333
 
     # arbitrarily choose the last node
-    peers = [(node[4][0], node[0], node[1]) for node in nodes if node[1] in [socket.SocketKind.SOCK_STREAM]]
+    peers = [(node[4][0], node[0], node[1], port) for node in nodes if node[1] in [socket.SocketKind.SOCK_STREAM]]
     return peers[::-1]
 
 

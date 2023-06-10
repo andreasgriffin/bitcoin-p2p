@@ -20,7 +20,7 @@ def call_back_tx(tx_bytes):
     #if not transaction:
     #    return
     
-    print(main.transaction_table(transaction))
+    print(tools.transaction_table(transaction))
     
     
 p2p.listen(p2p.get_bitcoin_peer(), call_back_tx=call_back_tx, callback_min_feerate=callback_min_feerate)
