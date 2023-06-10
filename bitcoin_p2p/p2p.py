@@ -312,7 +312,27 @@ def listen(peer,
            callback_version=None,
            f_continue_listening=lambda:True,
            timeout=60):
+    """
+    Description:
+    The listen function establishes a socket connection with a specified peer and listens for incoming messages. It continuously processes the received commands until a specified condition is met. It provides options to fetch transactions and supports various callback functions for different message types.
 
+    Inputs:
+
+        peer: (Type: string) - The address of the peer to connect to.
+        fetch_txs: (Type: boolean, Default: True) - Indicates whether to fetch transactions.
+        call_back_tx: (Type: function, Default: None) - Callback function for transaction data.
+        callback_min_feerate: (Type: function, Default: None) - Callback function for minimum feerate data.
+        callback_header: (Type: function, Default: None) - Callback function for header data.
+        callback_addr: (Type: function, Default: None) - Callback function for address data.
+        callback_inv: (Type: function, Default: None) - Callback function for inventory data.
+        callback_version: (Type: function, Default: None) - Callback function for version data.
+        f_continue_listening: (Type: function, Default: lambda:True) - Function that determines whether to continue listening.
+        timeout: (Type: integer, Default: 60) - The timeout value for the socket connection.
+
+    Output:
+
+        None
+    """
 
 
     try:
@@ -338,6 +358,20 @@ def listen(peer,
 
 
 def get_bitcoin_peers():
+    """
+    Description:
+    The get_bitcoin_peers function retrieves a list of Bitcoin peers by making a DNS request to a seed Bitcoin DNS server. It filters the obtained nodes based on socket kind and returns a list of peer addresses.
+
+    Inputs:
+
+        None
+
+    Output:
+
+        Type: list
+        Format: [(string, int, int), ...]
+        Description: A list of peer addresses, where each address is represented as a tuple containing the IP address (string), socket kind (int), and socket type (int).
+    """
     # dns_seeds = [
     #     'bitcoin.jonasschnelli.ch',
     #     'seed.btc.petertodd.org',
@@ -357,6 +391,20 @@ def get_bitcoin_peers():
 
 
 def get_bitcoin_peer():
+    """
+    Description:
+    The get_bitcoin_peer function retrieves a Bitcoin peer from the list of available peers obtained using get_bitcoin_peers function. It returns the first peer from the list.
+
+    Inputs:
+
+        None
+
+    Output:
+
+        Type: tuple
+        Format: (string, int, int)
+        Description: A tuple representing the address of the Bitcoin peer, containing the IP address (string), socket kind (int), and socket type (int).
+    """    
     return get_bitcoin_peers()[0]
 
 
@@ -365,6 +413,20 @@ def get_bitcoin_peer():
 
 
 def get_cbf_node():
+    """
+    Description:
+    The get_cbf_node function retrieves a Bitcoin peer that supports NODE_COMPACT_FILTERS. It iterates through the list of available peers obtained using get_bitcoin_peers function and tries each peer until it finds one supporting NODE_COMPACT_FILTERS. It sets up a callback function to check for NODE_COMPACT_FILTERS support.
+
+    Inputs:
+
+        None
+
+    Output:
+
+        Type: tuple
+        Format: (string, int, int)
+        Description: A tuple representing the address of the Bitcoin peer supporting NODE_COMPACT_FILTERS, containing the IP address (string), socket kind (int), and socket type (int).
+    """    
     def callback_version(version_data):
         nonlocal continue_listening
         nonlocal is_cbf
