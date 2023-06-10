@@ -1,4 +1,4 @@
-# Listen to the bitcoin p2p trasaction data
+# Listen to the bitcoin p2p transaction data
 
 `bitcoin-p2p` can listen (no verification) to the p2p traffic of a bitcoin node and display the transactions like:
 ```python
