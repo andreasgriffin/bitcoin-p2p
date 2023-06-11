@@ -1,10 +1,11 @@
 import socket
-import struct
+import struct, asyncio
+from asyncio import StreamReader, StreamWriter
 import time, os
 import hashlib
 import bdkpython as bdk
 # https://en.bitcoin.it/wiki/Protocol_documentation#version
-
+from typing import Tuple, Union, List
 debug = False
 
 
@@ -27,10 +28,11 @@ def decode_varint(data):
 def double_sha256(payload):
     return hashlib.sha256(hashlib.sha256(payload).digest()).digest()
 
-def receive_exactly(sock, size):
+
+async def receive_exactly(reader:StreamReader, size):
     data = b''
     while len(data) < size:
-        more_data = sock.recv(size - len(data))
+        more_data = await reader.readexactly(size - len(data))
         if not more_data:
             raise Exception(f"Connection closed. data = {data}")
         data += more_data
@@ -156,8 +158,13 @@ def decode_version_payload(payload):
     return result
 
 
+
+async def send(writer:StreamWriter, message):
+    writer.write(message)
+    await writer.drain()    
+    return
     
-def process_command(s,
+async def process_command(reader, writer,
                     fetch_txs=True,
                     call_back_tx=None, 
                     callback_min_feerate=None, 
@@ -169,19 +176,19 @@ def process_command(s,
 
     if debug:
         print('\nwaiting for message')
-    header = receive_exactly(s, 24)
+    header = await receive_exactly(reader, 24)
     command = header[4:16].strip(b'\x00').decode()
     payload_length = struct.unpack("I", header[16:20])[0]
     if debug:
         print(f'command {command}  payload_length {payload_length}')
     if payload_length > 0:
-        payload = receive_exactly(s, payload_length)
+        payload = await receive_exactly(reader, payload_length)
     else:
         payload = b''
 
         
     if command == "verack":
-        s.send(get_bitcoin_message("verack", b'', network=network))
+        await send(writer, get_bitcoin_message("verack", b'', network=network))
         
 
     elif command == 'sendheaders':
@@ -197,7 +204,7 @@ def process_command(s,
             callback_version(version_data)
         
         # Respond with verack message
-        s.send(get_bitcoin_message("verack", b'', network=network))            
+        await send(writer, get_bitcoin_message("verack", b'', network=network))            
     elif command == 'inv':
         count, consumed = decode_varint(payload)  # read varint
         print(f'Inventory count {count}')
@@ -225,7 +232,7 @@ def process_command(s,
             getdata_payload = encode_varint(len(inv_type_hashes))
             for inv_type, tx_hash in inv_type_hashes:
                 getdata_payload += struct.pack("<I32s", inv_type, tx_hash)
-            s.send(get_bitcoin_message("getdata", getdata_payload, network=network))
+            await send(writer, get_bitcoin_message("getdata", getdata_payload, network=network))
         
         
     elif command == 'addr':
@@ -249,7 +256,7 @@ def process_command(s,
         # Handle ping message: Respond with a pong message
         print("Received ping")
         nonce = payload[:8]  # nonce is 8 bytes
-        s.send(get_bitcoin_message("pong", nonce, network=network))
+        await send(writer, get_bitcoin_message("pong", nonce, network=network))
 
     elif command == 'getheaders':
         # Handle getheaders message
@@ -294,28 +301,35 @@ def process_command(s,
 
 
 
-def create_socket_connection(peer, timeout=60, network=bdk.Network.BITCOIN):
+
+async def create_socket_connection(peer, timeout=60, network=bdk.Network.BITCOIN)  -> Tuple[StreamReader, StreamWriter]:
     print(f'Connecting to {peer}')
     port = peer[3]
-    # Connect to the node
+
     if isinstance(peer, (list, tuple)):
-        s = socket.socket(peer[1], peer[2])
         peer_ip = peer[0]
     else:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         peer_ip = peer
-    
-    s.settimeout(timeout)  # timeout after 60 seconds of inactivity
-    s.connect((peer_ip, port))  # replace with your node's IP and port
+
+    try:
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(peer_ip, port),
+            timeout=timeout
+        )
+    except asyncio.TimeoutError:
+        print(f"Connection to {peer} timed out.")
+        return None, None
+
     print(f'Success. Connected to {peer}')
 
-    s.send(get_bitcoin_message("version", get_version_payload(peer_ip, port), network=network))
-    return s    
+    await send(writer, get_bitcoin_message("version", get_version_payload(peer_ip, port), network=network))
+
+    return reader, writer
     
 
 
 
-def listen(peer, 
+async def listen(peer, 
            fetch_txs=True,
            call_back_tx=None, 
            callback_min_feerate=None, 
@@ -351,11 +365,11 @@ def listen(peer,
 
 
     try:
-        s = create_socket_connection(peer, timeout=timeout, network=network)
+        reader, writer = await create_socket_connection(peer, timeout=timeout, network=network)
         print('socket connection created')
         # Listen for incoming messages
         while f_continue_listening():
-            process_command(s, fetch_txs=fetch_txs, call_back_tx=call_back_tx,
+            await process_command(reader, writer, fetch_txs=fetch_txs, call_back_tx=call_back_tx,
                             callback_min_feerate=callback_min_feerate, callback_header=callback_header,
                             callback_addr=callback_addr, callback_inv=callback_inv, callback_version=callback_version, network=network)
     except TimeoutError:
@@ -432,7 +446,7 @@ def get_bitcoin_peer():
 
 
 
-def get_cbf_node():
+async def get_cbf_node():
     """
     Description:
     The get_cbf_node function retrieves a Bitcoin peer that supports NODE_COMPACT_FILTERS. It iterates through the list of available peers obtained using get_bitcoin_peers function and tries each peer until it finds one supporting NODE_COMPACT_FILTERS. It sets up a callback function to check for NODE_COMPACT_FILTERS support.
@@ -466,7 +480,7 @@ def get_cbf_node():
             if debug:
                 print(f'Try peer {i}/{len(peers)}')
             continue_listening = True
-            listen(peer, callback_version=callback_version, f_continue_listening=f_continue_listening, timeout=5)
+            await listen(peer, callback_version=callback_version, f_continue_listening=f_continue_listening, timeout=5)
             if is_cbf:
                 return peer   
             
