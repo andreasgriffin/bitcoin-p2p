@@ -40,13 +40,13 @@ async def receive_exactly(reader:StreamReader, size):
 
 def get_bitcoin_message(message_type, payload, network=bdk.Network.BITCOIN):
     if network==bdk.Network.BITCOIN:
-        magic_value = 0xF9BEB4D9
-    elif network in [bdk.Network.REGTEST]:
-        magic_value = 0xDAB5BFFA
-    elif network in [bdk.Network.TESTNET, bdk.Network.REGTEST]:
-        magic_value = 0x0B110907
-    elif network in [bdk.Network.SIGNET]:
-        magic_value = 0x40CF030A
+        magic_value =  0xF9BEB4D9 
+    elif network  == bdk.Network.REGTEST:
+        magic_value = 0xFABFB5DA 
+    elif network == bdk.Network.TESTNET:
+        magic_value = 0x0B110907 
+    elif network == bdk.Network.SIGNET:
+        magic_value =  0x0A03CF40 
         
         
     header = struct.pack(">L", magic_value)        
