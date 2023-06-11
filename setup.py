@@ -19,7 +19,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name="bitcoin_p2p",
-    version="0.1",
+    version="0.2",
     author="Andreas Griffin",
     author_email="andreasgriffin@proton.me",
     description="Bitcoin p2p communication tools in python",
