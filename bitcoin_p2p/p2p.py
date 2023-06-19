@@ -55,6 +55,24 @@ def get_bitcoin_message(message_type, payload, network=bdk.Network.BITCOIN):
     header += double_sha256(payload)[:4]
     return header + payload
 
+
+
+def create_tx_message(raw_tx_hex: str, network=bdk.Network.BITCOIN) -> bytes:
+    # Assuming raw_tx_hex is a hex string representing your transaction
+    # Convert it into bytes
+    raw_tx_bytes = bytes.fromhex(raw_tx_hex)
+    # Create a tx message using the provided get_bitcoin_message function
+    return get_bitcoin_message("tx", raw_tx_bytes, network)
+
+
+async def send_transaction(writer: StreamWriter, raw_tx_hex: str, network=bdk.Network.BITCOIN):
+    res = await send(writer, create_tx_message(raw_tx_hex, network))
+    print(f'send_transaction {raw_tx_hex}')
+    return res
+    
+
+
+
 def get_version_payload(remote_ip, remote_port):
     my_ip = '127.0.0.1'  # is is ok for  a non-reachable node
     my_port = 8333
@@ -86,9 +104,9 @@ def get_version_payload(remote_ip, remote_port):
     payload += struct.pack("<B", user_agentbytes)
     payload += struct.pack("<I", start_height)
     payload += struct.pack("<?", relay)
-
     return payload        
-        
+
+
 
 def encode_varint(n):
     if n < 0xfd:
@@ -154,7 +172,6 @@ def decode_version_payload(payload):
         'start_height': start_height,
         'relay': relay,
     }
-
     return result
 
 
@@ -166,16 +183,17 @@ async def send(writer:StreamWriter, message):
     
 async def process_command(reader, writer,
                     fetch_txs=True,
-                    call_back_tx=None, 
+                    callback_recv_tx=None, 
                     callback_min_feerate=None, 
                     callback_header=None, 
                     callback_addr=None, 
                     callback_inv=None,
                     callback_version=None,
+                    callback_reader_writer=None,
                     network=bdk.Network.BITCOIN):
 
     if debug:
-        print('\nwaiting for message')
+        print('\nwaiting for message')    
     header = await receive_exactly(reader, 24)
     command = header[4:16].strip(b'\x00').decode()
     payload_length = struct.unpack("I", header[16:20])[0]
@@ -272,8 +290,8 @@ async def process_command(reader, writer,
         
 
     elif command == 'tx':
-        if call_back_tx:
-            call_back_tx(payload)
+        if callback_recv_tx:
+            callback_recv_tx(payload)
         else:
             tx_hash = double_sha256(payload)[::-1].hex()
             print("Received transaction:", tx_hash)            
@@ -298,8 +316,8 @@ async def process_command(reader, writer,
         
         print(f'unknown command {command}')
 
-
-
+    if callback_reader_writer:
+        await callback_reader_writer(reader, writer)
 
 
 async def create_socket_connection(peer, timeout=60, network=bdk.Network.BITCOIN)  -> Tuple[StreamReader, StreamWriter]:
@@ -331,12 +349,13 @@ async def create_socket_connection(peer, timeout=60, network=bdk.Network.BITCOIN
 
 async def listen(peer, 
            fetch_txs=True,
-           call_back_tx=None, 
+           callback_recv_tx=None, 
            callback_min_feerate=None, 
            callback_header=None, 
            callback_addr=None, 
            callback_inv=None,
            callback_version=None,
+           callback_reader_writer=None,
            f_continue_listening=lambda:True,
            timeout=60,
            network=bdk.Network.BITCOIN,
@@ -349,7 +368,7 @@ async def listen(peer,
 
         peer: (Type: string) - The address of the peer; a tuple containing the IP address (string), socket kind (int), and socket type (int), port (int).
         fetch_txs: (Type: boolean, Default: True) - Indicates whether to fetch transactions.
-        call_back_tx: (Type: function, Default: None) - Callback function for transaction data.
+        callback_recv_tx: (Type: function, Default: None) - Callback function for transaction data.
         callback_min_feerate: (Type: function, Default: None) - Callback function for minimum feerate data.
         callback_header: (Type: function, Default: None) - Callback function for header data.
         callback_addr: (Type: function, Default: None) - Callback function for address data.
@@ -369,16 +388,19 @@ async def listen(peer,
         print('socket connection created')
         # Listen for incoming messages
         while f_continue_listening():
-            await process_command(reader, writer, fetch_txs=fetch_txs, call_back_tx=call_back_tx,
+            await process_command(reader, writer, fetch_txs=fetch_txs, callback_recv_tx=callback_recv_tx,
                             callback_min_feerate=callback_min_feerate, callback_header=callback_header,
-                            callback_addr=callback_addr, callback_inv=callback_inv, callback_version=callback_version, network=network)
+                            callback_addr=callback_addr, callback_inv=callback_inv, callback_version=callback_version, 
+                            callback_reader_writer=callback_reader_writer,
+                            network=network)
     except TimeoutError:
         print('timeout')
     except OSError:
         print('OSError')
     finally:
-        if 's' in globals():
-            s.close()
+        if 'writer' in globals():
+            writer.close()
+            await writer.wait_closed()
             print('Connection closed')
 
 
@@ -436,8 +458,7 @@ def get_bitcoin_peer():
     Output:
 
         Type: tuple
-        Format: (string, int, int)
-        Description: A tuple representing the address of the Bitcoin peer, containing the IP address (string), socket kind (int), and socket type (int).
+        Format: (string, int, int, int)
     """    
     return get_bitcoin_peers()[0]
 
@@ -458,8 +479,7 @@ async def get_cbf_node():
     Output:
 
         Type: tuple
-        Format: (string, int, int)
-        Description: A tuple representing the address of the Bitcoin peer supporting NODE_COMPACT_FILTERS, containing the IP address (string), socket kind (int), and socket type (int).
+        Format: (string, int, int, int)
     """    
     def callback_version(version_data):
         nonlocal continue_listening
