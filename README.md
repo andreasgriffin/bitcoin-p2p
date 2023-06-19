@@ -1,6 +1,7 @@
 # Listen to the bitcoin p2p transaction data
 
 `bitcoin-p2p` can listen (no verification) to the p2p traffic of a bitcoin node and display the transactions like:
+
 ```python
 import socket, asyncio
 import bdkpython as bdk
@@ -13,18 +14,13 @@ def callback_min_feerate(feerate):
     global_dict['feerate'] = feerate
     
 
-def call_back_tx(tx_bytes):
+def callback_recv_tx(tx_bytes):
     transaction = tools.transaction_from_bytes(tx_bytes)
-
-    # transaction = tools.filter_txs(transaction)
-    #if not transaction:
-    #    return
-    
     print(tools.transaction_table(transaction))
     
     
 
-await p2p.listen(p2p.get_bitcoin_peer(), call_back_tx=call_back_tx, callback_min_feerate=callback_min_feerate )
+await p2p.listen(p2p.get_bitcoin_peer(), callback_recv_tx=callback_recv_tx, callback_min_feerate=callback_min_feerate )
 ```
 with the output:
 ```
